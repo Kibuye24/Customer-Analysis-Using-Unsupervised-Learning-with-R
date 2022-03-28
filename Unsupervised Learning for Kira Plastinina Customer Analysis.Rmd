@@ -1,0 +1,243 @@
+---
+title: "Kira Plastinina Customer Analysis"
+author: "Joshua Kibuye"
+date: '2022-03-26'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+# 1. Problem Definition
+Kira Plastinina is a Russian brand that is sold through a defunct chain of retail stores in Russia, Ukraine, Kazakhstan, Belarus, China, Philippines, and Armenia. The brand’s Sales and Marketing team would like to understand their customer’s behavior from data that they have collected over the past year. More specifically, they would like to learn the characteristics of customer groups.
+
+# 2. Data Sourcing
+```{r}
+#Loading the dataset
+df <- read.csv('http://bit.ly/EcommerceCustomersDataset')
+```
+
+# 3. Check the Dataset
+```{r}
+#Previewing the top of the dataset
+head(df)
+```
+```{r}
+#Checking the bottom of the dataset
+tail(df)
+```
+```{r}
+#Looking at the shape of the dataset
+dim(df)
+```
+The dataset has 12330 records and 18 colums
+```{r}
+#Looking at the datatypes of the dataset
+sapply(df, class)
+```
+Some of the datatypes will need encoding.
+```{r}
+#Getting more detailed look of the dataset
+library(dplyr)
+glimpse(df)
+```
+```{r}
+#Statistical summary of the dataset
+summary(df)
+```
+```{r}
+#Viewing the dataset
+View(df)
+```
+
+
+# 4. Perform Data Cleaning
+
+```{r}
+#Changing the column names to lower case for uniformity
+names(df) <- tolower(names(df))
+```
+
+```{r}
+#Checking for null values
+colSums(is.na(df))
+```
+There are 14 null values in the some columns of the dataset.
+```{r}
+#Plotting the percantage of missing to know how we will deal with them
+library(DataExplorer)
+plot_missing(df)
+```
+The missing data is only a small percantage, we therefore drop them.
+```{r}
+#Dropping missing values
+df <- na.omit(df)
+```
+
+```{r}
+#Checking if the changes have taken effect
+sum(colSums(is.na(df)))
+```
+All null values have been dropped.
+
+```{r}
+#Checking for duplicate values
+sum(duplicated(df))
+```
+There are 117 duplicate values. We will drop them.
+
+```{r}
+df <- df[!duplicated(df),]
+dim(df)
+```
+We drop the duplicates and attain a number of 12199 records.
+
+```{r}
+for(i in 1:10) {
+	boxplot(df[,i], main=names(df)[i], col = "red", horizontal=TRUE)}
+```
+```{r}
+#Outliers in the last columns
+for(i in 12:15) {
+	boxplot(df[,i], main=names(df)[i], col = "purple")}
+```
+There are outliers present in the dataset. However, we don't drop them as they are true values.
+```{r}
+#Defining numerical columns
+numeric <- df%>%select_if(is.numeric)
+```
+
+# 5. Perform Exploratory Data Analysis
+We now plot to find more information about the dataset.
+## 5.1 Univariate Analysis
+```{r}
+#Plotting histograms
+for(i in 1:10) {
+	hist(df[,i], main=names(df)[i], xlab=names(df)[i],col = "red")}
+```
+```{r}
+#Plotting histograms
+par(mfrow=c(3,2))
+for(i in 12:15) {
+	hist(df[,i], main=names(df)[i], xlab=names(df)[i],col = "red")}
+```
+
+```{r}
+plot(table(df$visitortype),lwd=20, col="blue")
+```
+Most visitors are returning visitors.
+```{r}
+#Getting statistical values of the dataset
+library(psych)
+describe(numeric)
+```
+We get valuable statistical information on the created data frame.
+## 5.2 Bivariate Analysis
+```{r}
+#Pairplot for numeric columns
+plot(numeric)
+```
+```{r}
+#Plotting bouncerates against exitrates
+plot(df$bouncerates, df$exitrates,
+     col="green",
+     ylab="Exit rates",
+     xlab="bounce rates",
+     main="Relationship between bouncerates and exitrates")
+```
+There is a linear relationship between bouncerates and exit rates.
+```{r}
+plot(df$administrative_duration, df$productrelated_duration,
+     col="yellow",
+     ylab="Product Related Duration",
+     xlab="Administrative Duration",
+     main="Relationship between Product Related Duration and Administrative duration")
+```
+```{r}
+#Stacked Chart of Visitor type by Month
+library(ggplot2)
+df%>%
+  ggplot(aes(month))+
+  geom_bar(aes(fill=visitortype))+
+  labs(title = "Visitor Type by Month")
+  
+```
+## 5.3 Multivariate Analysis
+```{r}
+library(corrplot)
+# calculate correlations
+correlations <- cor(numeric)
+# create correlation plot
+corrplot(correlations, method="number")
+
+```
+```{r}
+#Encoding our dataset
+library(superml)
+df$weekend <- ifelse(df$weekend == TRUE, 1, 0)
+df$revenue <- ifelse(df$revenue == TRUE, 1, 0)
+label <- LabelEncoder$new()
+ 
+#Label encoding the month
+df$month <- label$fit_transform(df$month)
+df$visitortype <- label$fit_transform(df$visitortype)
+```
+
+```{r}
+#Checking if the changes have taken effect
+head(df)
+```
+Now the dataset can be modeled.
+
+# 6. Implement the Solution
+# 6.1 K-Nearest Neighbor
+```{r}
+#Dropping revenue as it is the class type
+df_X <- df%>%select(-revenue)
+```
+
+```{r}
+#Creating a dataset for revenue alone
+df_y <- df%>%select(revenue)
+```
+
+```{r}
+#Scaling the dataset for better modelling
+df_X <- scale(df_X)
+head(df_X)
+```
+
+```{r}
+# Searching for the optimal number of clusters
+# # Elbow method
+library(factoextra)
+fviz_nbclust(df_X, kmeans, method = "silhouette") +
+    geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Silhouette method")
+```
+Optimal number of K is 2
+```{r}
+result <- kmeans(df_X, centers = 2)
+print(result)
+```
+
+```{r}
+fviz_cluster(result, data = df_X)
+```
+The model looks fairly strong as most revenue classes were false with few as true.
+# 7. Challenge the Solution
+## 7.1 Hieriarchal Clustering
+```{r}
+# First we use the dist() to compute the Euclidean distance btwn obs
+#d will be the first argument in the hclust() dissimilairty matrix
+d <- dist(df_X, method = "euclidean")
+
+# We then apply hierarchical clustering using the Ward's method
+
+res.hc <- hclust(d, method = "ward.D2")
+
+# Lastly we plot the obtained dendrogram
+#--
+
+plot(res.hc, cex = 0.6, hang = -1)
+```
